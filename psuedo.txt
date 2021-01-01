@@ -1,0 +1,71 @@
+!1 Heading here
+
+!Doc {
+    doc stuff here
+}
+
+!Toc
+
+!Font Arial
+
+Blah blah b(bold text here) blah blah.
+
+---
+
+elements[][]
+elementIndex
+context
+textBuffer
+currentTagName
+
+start
+    if char is "!"
+        context = readingTagName
+    else
+        context = readingParagraph
+
+readingTagName
+    if char is letter or number
+        textBuffer += char
+    if char is whitespace
+        currentTagName = textBuffer
+        textBuffer = ""
+        context = readingTagContent
+    else
+        unexpected char
+
+readingTagContent
+    if char is letter or char is number or whitespace
+        textBuffer += char
+    else if char is "{"
+        context = readingTagBlock
+    else if char is newline
+        elements[elementIndex++] = [currentTagName, textBuffer]
+        textBuffer = ""
+        context = start
+    else
+        unexpected char
+
+readingTagAttribute
+    if char !whitespace
+        textBuffer += char
+    else
+        context = determineTagType
+
+readingTagBlock
+    if char is "}"
+        elements[elementIndex++] = [currentTagName, textBuffer]
+        textBuffer = ""
+        context = start
+    else
+        textBuffer += char
+
+readingParagraph
+    if char is letter and char+1 is "("
+        elements[elementIndex++] = ["", textBuffer]
+        currentTagName = char
+        context = readingPTagContent
+    else if char is newline
+        elements[elementIndex++] = [currentTagName, textBuffer]
+    else
+        textBuffer += char
