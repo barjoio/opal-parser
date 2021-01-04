@@ -1,0 +1,42 @@
+stateStack []state
+
+state {
+    context string
+    textBuffer string
+    elementPos int
+}
+
+getState()
+setState()
+pushState()
+popState()
+
+start
+    ! -> tagName
+    * -> paragraph
+
+tagName
+    newline -> start
+    space -> tagAttrs
+    letter
+
+tagAttrs
+    { -> tagBlock
+    newline -> start
+    space
+    *
+
+tagBlock
+    } -> start
+    ,
+    *
+
+paragraph
+    ( -> paragraphElement
+    newline -> start
+    *
+
+paragraphElement
+    ) -> paragraph
+    newline: error
+    *
