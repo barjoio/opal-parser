@@ -1,0 +1,34 @@
+#
+#	EBNF Representation of the Opal Markup Language
+#
+
+anyChar = ? all visible characters ? ;
+
+# structure syntax
+newLine			= "\n"
+whiteSpace		= "\t" | " " ;
+terminator		= newLine | ";" ;
+alphanumeric	= ? a-z A-Z 0-9 ?
+
+# element symbols
+elementAttr		= "/" + ( anyChar - "/" ) ;
+stdBlock		= ( anyChar - ( terminator, terminator ) ), terminator, terminator ;
+inlineBlock		= ( anyChar - terminator ), terminator, terminator ;
+extendedBlock	= "-", terminator, ( anyChar - "----" ), "----", terminator, terminator ;
+
+# element construct
+elementConstruct = ".", { alphanumeric }, (
+	":", inlineBlock
+	| [ { elementAttr } ], (
+		terminator, ( stdBlock | terminator )
+		| extendedBlock
+	)
+) ;
+
+# paragraph
+paragraphText	= ( anyChar - "`" ) ;
+inlineElement	= "`" + { ( alphanumeric - whiteSpace ) }, whiteSpace, ( anyChar - "`" ) + "`" ;
+paragraph = { [ { paragraphText } ], [ inlineElement ] } ;
+
+# document
+document = { paragraph | elementConstruct }
