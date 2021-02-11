@@ -17,16 +17,23 @@ type token struct {
 // print format for tokens
 func (t token) String() string {
 	fmt.Printf("[%d,%d]: ", t.line, t.pos+1)
-	switch {
-	case t.typ == tokenEOF:
+	if t.typ == tokenError {
+		fmt.Printf("Erroneous char: ")
+	}
+	switch t.typ {
+	case tokenEOF:
 		return "EOF"
-	case t.typ == tokenNewline:
+	case tokenNewline:
 		return "New line"
-	case t.typ == tokenSpace:
+	case tokenSpace:
 		return "Whitespace"
-	case t.typ == tokenTerminator:
-		return "Terminator"
-	case len(t.val) > 10:
+	case tokenTerminator:
+		if t.val == string(charSemicolon) {
+			return "Terminator: ';'"
+		}
+		return "Terminator: Doubleline"
+	}
+	if len(t.val) > 10 {
 		return fmt.Sprintf("%.10q...", t.val)
 	}
 	return fmt.Sprintf("%q", t.val)
@@ -62,14 +69,15 @@ const (
 )
 
 const (
-	charFullstop  = "."
-	charColon     = ":"
-	charSlash     = "/"
-	charNewline   = "\n"
-	charSemicolon = ";"
-	charGrave     = "`"
-	charGateOpen  = "-"
-	charGateClose = "----"
+	eof           rune = -1
+	charFullstop       = '.'
+	charColon          = ':'
+	charSlash          = '/'
+	charNewline        = '\n'
+	charSemicolon      = ';'
+	charGrave          = '`'
+	charGateOpen       = '-'
+	charGateClose      = "----"
 )
 
 // lexFn represents the state of the scanner as a function that returns the next state.
@@ -84,16 +92,24 @@ type lexer struct {
 	tokens    chan token // channel of scanned tokens
 	line      int        // 1+number of newlines seen
 	startLine int        // start line of this item
+	len       int
+	termLen   int
+	cur       rune
 }
 
 // next returns the next rune in the input.
 func (l *lexer) next() rune {
+	if l.pos >= l.len {
+		l.width = 0
+		return eof
+	}
 	r, w := utf8.DecodeRuneInString(l.input[l.pos:])
 	l.width = w
 	l.pos += l.width
 	if r == '\n' {
 		l.line++
 	}
+	l.cur = r
 	return r
 }
 
@@ -105,6 +121,13 @@ func (l *lexer) nextN(n int) {
 	}
 }
 
+// peek returns but does not consume the next rune in the input.
+func (l *lexer) peek() rune {
+	r := l.next()
+	l.backup()
+	return r
+}
+
 // backup steps back one rune. Can only be called once per call of next.
 func (l *lexer) backup() {
 	l.pos -= l.width
@@ -112,9 +135,9 @@ func (l *lexer) backup() {
 	if l.width == 1 && l.input[l.pos] == '\n' {
 		l.line--
 	}
+	l.cur = rune(l.input[l.pos])
 }
 
-// backup steps back one rune. Can only be called once per call of next.
 func (l *lexer) backupN(n int) {
 	if n > 0 {
 		for i := 0; i < n; i++ {
@@ -125,7 +148,9 @@ func (l *lexer) backupN(n int) {
 
 // emit passes an item back to the client.
 func (l *lexer) emit(t tokenType) {
-	l.tokens <- token{t, l.start, l.input[l.start:l.pos], l.startLine}
+	if l.pos > l.start || t == tokenEOF {
+		l.tokens <- token{t, l.start, l.input[l.start:l.pos], l.startLine}
+	}
 	l.start = l.pos
 	l.startLine = l.line
 }
@@ -155,9 +180,8 @@ func (l *lexer) acceptRun(valid string) {
 
 // errorf returns an error token and terminates the scan by passing
 // back a nil pointer that will be the next state, terminating l.nextItem.
-func (l *lexer) errorf(format string, args ...interface{}) lexFn {
+func (l *lexer) errorf(format string, args ...interface{}) {
 	l.tokens <- token{tokenError, l.start, fmt.Sprintf(format, args...), l.startLine}
-	return nil
 }
 
 // nextItem returns the next item from the input.
@@ -170,10 +194,11 @@ func (l *lexer) nextItem() token {
 func lex(name, input string) *lexer {
 	l := &lexer{
 		name:      name,
-		input:     input + charSemicolon,
+		input:     input + string(charSemicolon),
 		tokens:    make(chan token),
 		line:      1,
 		startLine: 1,
+		len:       len(input),
 	}
 	go l.run()
 	return l
@@ -181,9 +206,10 @@ func lex(name, input string) *lexer {
 
 // run runs the state machine for the lexer.
 func (l *lexer) run() {
-	for state := lexBegin; state != nil && l.pos < len(l.input)-1; {
+	for state := lexBegin; state != nil; {
 		state = state(l)
 	}
+
 	l.emit(tokenEOF)
 	close(l.tokens)
 }
@@ -196,37 +222,57 @@ func (l *lexer) posToEnd() string {
 	return l.input[l.pos:]
 }
 
+func (l *lexer) isEOF() bool {
+	return l.pos >= l.len
+}
+
 func (l *lexer) accomNewLines() {
-	l.line += strings.Count(l.input[l.start:l.pos], charNewline)
+	l.line += strings.Count(l.input[l.start:l.pos], string(charNewline))
 }
 
 func (l *lexer) skipSpace() {
-	l.start = l.pos
-	for isSpace(l.next()) {
-	}
-	l.backup()
-	if l.pos-l.start > 0 {
-		l.emit(tokenSpace)
+	for i := 0; ; i++ {
+		r := l.next()
+		if !isSpace(r) {
+			if r != eof {
+				l.backup()
+			}
+			if i > 0 {
+				l.emit(tokenSpace)
+			}
+			break
+		}
 	}
 }
 
-func (l *lexer) checkForTerminator(callback func()) bool {
-	if strings.HasPrefix(l.posToEnd(), charSemicolon) {
-		callback()
-		l.next()
-		l.nextN(len(l.posToEnd()) - len(strings.TrimSpace(l.posToEnd())))
-		l.emit(tokenTerminator)
-		return true
-	} else if strings.HasPrefix(l.posToEnd(), charNewline) {
-		diff := len(l.posToEnd()) - len(strings.TrimSpace(l.posToEnd()))
-		if diff >= 2 && strings.Count(l.input[l.pos:l.pos+diff], charNewline) >= 2 {
-			callback()
-			l.nextN(diff)
-			l.emit(tokenTerminator)
-			return true
+// checkForTerminator checks to see if the current rune, or runes
+// thereafter, represent a termination. This is either a semicolon
+// or a group of whitespace containing 2 newlines
+func (l *lexer) checkForTerminator() rune {
+	r := l.cur
+	if r != charSemicolon && r != charNewline {
+		return -1
+	}
+	if r == charSemicolon {
+		l.termLen = 1
+		return r
+	}
+	diff := len(l.posToEnd()) - len(strings.TrimSpace(l.posToEnd()))
+	if diff >= 1 {
+		diffText := l.input[l.pos : l.pos+diff]
+		if strings.Count(diffText, "\n") >= 1 {
+			l.termLen = diff + 1
+			return r
 		}
 	}
-	return false
+	return -1
+}
+
+func (l *lexer) checkForSpace() rune {
+	if isSpace(l.cur) {
+		return l.cur
+	}
+	return -1
 }
 
 //
@@ -236,73 +282,134 @@ func (l *lexer) checkForTerminator(callback func()) bool {
 func lexBegin(l *lexer) lexFn {
 	l.skipSpace()
 
-	if strings.HasPrefix(l.posToEnd(), charFullstop) {
-		return lexFullstop
+	switch l.next() {
+	case eof:
+		return nil
+	case charFullstop:
+		l.emit(tokenFullstop)
+		return lexElement
 	}
 	return lexParagraph
-}
-
-func lexFullstop(l *lexer) lexFn {
-	l.next()
-	l.emit(tokenFullstop)
-	return lexElement
 }
 
 func lexElement(l *lexer) lexFn {
 	for {
-		if strings.HasPrefix(l.posToEnd(), charColon) {
+		switch l.next() {
+		case eof:
+			l.emit(tokenElement)
+			return nil
+		case charColon:
+			l.backup()
 			l.emit(tokenElement)
 			l.next()
 			l.emit(tokenColon)
-			l.skipSpace()
 			return lexInlineBlock
-		} else if strings.HasPrefix(l.posToEnd(), charSlash) {
+		case charSlash:
+			return nil
+		case l.checkForTerminator():
+			l.backup()
 			l.emit(tokenElement)
+			l.nextN(l.termLen)
+			l.emit(tokenTerminator)
 			return lexBegin
-		} else if l.checkForTerminator(func() { l.emit(tokenElement) }) {
-			return lexBegin
-		} else if strings.HasPrefix(l.posToEnd(), charNewline) {
+		case charNewline:
+			l.backup()
 			l.emit(tokenElement)
 			l.next()
 			l.emit(tokenNewline)
-			l.next()
-			return lexBegin
+			return nil
 		}
-
-		l.next()
 	}
 }
 
 func lexInlineBlock(l *lexer) lexFn {
-	if l.checkForTerminator(func() { l.emit(tokenInlineBlock) }) {
-		return lexBegin
+	for {
+		switch l.next() {
+		case eof:
+			l.emit(tokenInlineBlock)
+			return nil
+		case l.checkForTerminator():
+			l.backup()
+			l.emit(tokenInlineBlock)
+			l.nextN(l.termLen)
+			l.emit(tokenTerminator)
+			return lexBegin
+		case charNewline:
+			l.backup()
+			l.emit(tokenElement)
+			l.next()
+			l.emit(tokenNewline)
+		}
 	}
-	l.next()
-	return lexInlineBlock
 }
 
 func lexParagraph(l *lexer) lexFn {
-	if strings.HasPrefix(l.posToEnd(), charGrave) {
-		l.accomNewLines()
-		l.emit(tokenParagraphText)
-		l.next()
-		l.emit(tokenGrave)
-		return lexInlineElement
-	} else if l.checkForTerminator(func() { l.accomNewLines(); l.emit(tokenParagraphText) }) {
-		return lexBegin
+	for {
+		switch l.next() {
+		case eof:
+			l.emit(tokenParagraphText)
+			return nil
+		case charGrave:
+			l.backup()
+			l.emit(tokenParagraphText)
+			l.next()
+			l.emit(tokenGrave)
+			return lexInlineElement
+		case l.checkForTerminator():
+			l.backup()
+			l.emit(tokenParagraphText)
+			l.nextN(l.termLen)
+			l.emit(tokenTerminator)
+			return lexBegin
+		case charNewline:
+			l.backup()
+			l.emit(tokenParagraphText)
+			l.next()
+			l.emit(tokenNewline)
+		}
 	}
-	l.next()
-	return lexParagraph
 }
 
 func lexInlineElement(l *lexer) lexFn {
-	if strings.HasPrefix(l.posToEnd(), charGrave) {
-		l.accomNewLines()
-		l.emit(tokenInlineElement)
-		l.next()
-		l.emit(tokenGrave)
-		return lexParagraph
+	for {
+		switch l.next() {
+		case eof:
+			l.emit(tokenInlineElement)
+			return nil
+		case charGrave:
+			l.backup()
+			l.emit(tokenInlineElement)
+			l.next()
+			l.emit(tokenGrave)
+			return lexParagraph
+		case l.checkForTerminator():
+			l.backup()
+			l.emit(tokenInlineElement)
+			l.nextN(l.termLen)
+			l.emit(tokenTerminator)
+			return lexBegin
+		case l.checkForSpace():
+			l.backup()
+			l.emit(tokenInlineElement)
+			l.next()
+			l.emit(tokenSpace)
+			return lexInlineElementContent
+		}
 	}
-	l.next()
-	return lexInlineElement
+}
+
+func lexInlineElementContent(l *lexer) lexFn {
+	for {
+		switch l.next() {
+		case eof:
+			l.emit(tokenInlineElementContent)
+			return nil
+		case charGrave:
+			l.backup()
+			l.emit(tokenInlineElementContent)
+			l.next()
+			l.emit(tokenGrave)
+			return lexParagraph
+		}
+	}
 }
