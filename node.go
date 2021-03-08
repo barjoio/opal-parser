@@ -1,13 +1,16 @@
 package opalparser2
 
+import "fmt"
+
 // Node is a grammatically defined element in the Opal language
 // these are used to construct the abstract syntax tree
 type Node struct {
-	Type     nodeType `json:"type,omitempty"`
-	Value    string   `json:"value,omitempty"`
-	Ln       int      `json:"line,omitempty"`
-	Col      int      `json:"column,omitempty"`
-	Children []*Node  `json:"children,omitempty"`
+	Type     nodeType  `json:"type,omitempty"`
+	Errors   []errType `json:"errors,omitempty"`
+	Value    string    `json:"value,omitempty"`
+	Ln       int       `json:"line,omitempty"`
+	Col      int       `json:"column,omitempty"`
+	Children []*Node   `json:"children,omitempty"`
 }
 
 type nodeType string
@@ -16,6 +19,7 @@ type nodeType string
 const (
 	nodeEOF           nodeType = "EOF"
 	nodeWhitespace    nodeType = "Whitespace"
+	nodeRoot          nodeType = "Root"
 	nodeParagraph     nodeType = "Paragraph"
 	nodeParagraphText nodeType = "ParagraphText"
 	nodeInlineTag     nodeType = "InlineTag"
@@ -27,9 +31,9 @@ const (
 // parent nodes have only a type and list of children
 func (p *Parser) createNode(n nodeType, isParentNode bool) *Node {
 	if !isParentNode {
-		return &Node{n, p.frame, p.startLn, p.startCol, []*Node{}}
+		return &Node{n, nil, p.frame, p.startLn, p.startCol, []*Node{}}
 	}
-	return &Node{n, "", 0, 0, []*Node{}}
+	return &Node{n, nil, "", 0, 0, []*Node{}}
 }
 
 // createParentNode appends a new parent node to the node stack
@@ -78,4 +82,9 @@ func (p *Parser) addToParent() {
 	secondToTopNode := p.nodeStack[lenNodeStack-2]
 	secondToTopNode.Children = append(secondToTopNode.Children, topNode)
 	p.popNode()
+}
+
+func (p *Parser) addError(e errType) {
+	err := fmt.Sprintf("%s on line %d, column %d.", e, p.startLn, p.startCol)
+	p.nodeStack[0].Errors = append(p.nodeStack[0].Errors, errType(err))
 }

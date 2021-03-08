@@ -10,6 +10,7 @@ func parseBegin(p *Parser) parseFn {
 
 	switch p.char {
 	case eof:
+		p.addToParent()
 		return nil
 	case charFullstop:
 		return nil
@@ -26,6 +27,7 @@ func parseParagraph(p *Parser) parseFn {
 
 	switch p.char {
 	case eof:
+		p.addToParent()
 		return nil
 	case terminator:
 		p.addToParent()
@@ -48,8 +50,15 @@ func parseInlineTag(p *Parser) parseFn {
 
 	p.skipWhitespace(false)
 	switch p.char {
-	case eof, terminator:
+	case eof:
+		p.addError(errUnexpectedEOF)
 		p.addToParent()
+		return p.popParseFn()
+	case terminator:
+		p.addError(errUnexpectedTerm)
+		p.addToParent()
+		p.next()
+		p.flattenFrame()
 		return p.popParseFn()
 	}
 
@@ -57,8 +66,15 @@ func parseInlineTag(p *Parser) parseFn {
 
 	p.nextUntil(nodeInlineTagName, charsWhitespace, "`")
 	switch p.char {
-	case eof, terminator:
+	case eof:
+		p.addError(errUnexpectedEOF)
 		p.addToParent()
+		return p.popParseFn()
+	case terminator:
+		p.addError(errUnexpectedTerm)
+		p.addToParent()
+		p.next()
+		p.flattenFrame()
 		return p.popParseFn()
 	}
 
@@ -66,8 +82,15 @@ func parseInlineTag(p *Parser) parseFn {
 
 	p.nextUntil(nodeInlineTagText, "`", "")
 	switch p.char {
-	case eof, terminator:
+	case eof:
+		p.addError(errUnexpectedEOF)
 		p.addToParent()
+		return p.popParseFn()
+	case terminator:
+		p.addError(errUnexpectedTerm)
+		p.addToParent()
+		p.next()
+		p.flattenFrame()
 		return p.popParseFn()
 	}
 

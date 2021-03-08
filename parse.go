@@ -42,6 +42,8 @@ func (p *Parser) Parse(input string) {
 	p.len = len(input)
 	p.parseFn = parseBegin
 
+	p.createParentNode(nodeRoot)
+
 	for p.parseFn != nil {
 		p.parseFn = p.parseFn(p)
 	}
