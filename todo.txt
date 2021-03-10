@@ -1,1 +1,11 @@
+parseText method
+
 accommodate special multi-byte characters 
+
+
+abc `
+` def    <-- ln/col here is wrong
+
+
+create errX()
+and change goto errX to errX()

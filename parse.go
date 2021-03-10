@@ -4,14 +4,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // Parser is used to parse Opal documents
 type Parser struct {
 	input      string    // the string input containing markup
+	filepath   string    // the file path to the markup file
 	char       charType  // the current character
+	charWidth  int       // the number of bytes used by the current character
 	frame      string    // the current sliding window selection
 	len        int       // the length of the string input
 	start      int       // the start of the sliding window
@@ -20,16 +24,18 @@ type Parser struct {
 	col        int       // the column number (position within line)
 	startLn    int       // the starting line of a node
 	startCol   int       // the starting column of a node
+	firstSpace charType  // stores the first encountered space in a set of whitespace
+	linesHere  int       // stores the number of lines encountered through a set of whitespace
 	parseFn    parseFn   // the current parse function
 	parseStack []parseFn // a stack of parse functions
 	tree       []*Node   // the abstract syntax tree
 	nodeStack  []*Node   // a stack of nodes
+	nodeType   nodeType  // the nodeType of the current parent node
 }
 
 // New is used to create a new parser
 func New() *Parser {
 	return &Parser{
-		pos:      -1,
 		ln:       1,
 		startCol: 1,
 		startLn:  1,
@@ -42,7 +48,7 @@ func (p *Parser) Parse(input string) {
 	p.len = len(input)
 	p.parseFn = parseBegin
 
-	p.createParentNode(nodeRoot)
+	p.createNode(nodeRoot)
 
 	for p.parseFn != nil {
 		p.parseFn = p.parseFn(p)
@@ -65,6 +71,7 @@ func (p *Parser) ParseFile(filein string) {
 	if err != nil {
 		panic(err)
 	}
+	p.filepath = filein
 	p.Parse(string(b))
 }
 
@@ -86,65 +93,101 @@ func (p *Parser) flattenFrame() {
 	p.start = p.pos
 	p.startCol = p.col
 	p.startLn = p.ln
-	p.frame = p.input[p.start:p.pos]
+	p.frame = ""
 }
 
 // next is used to advance the parsing state
 func (p *Parser) next() {
-	p.pos++
-	p.frame = p.input[p.start:p.pos]
+	// add current character to frame
+	if p.char != 0 {
+		p.frame += string(p.char)
+	}
 
-	if p.pos >= p.len {
+repeat:
+
+	// check for eof
+	if p.pos >= p.len-1 {
 		p.char = eof
+		p.pos++
 		return
 	}
 
-	p.char = charType(p.input[p.pos])
-
+	// increment pos/col
+	p.pos += p.charWidth
 	p.col++
+
+	// get new char
+	r, w := utf8.DecodeRuneInString(p.input[p.pos:])
+	p.char = charType(r)
+	p.charWidth = w
+
+	// handle newlines
 	if p.char == charNewline {
 		p.ln++
-		p.col = 1
+		p.col = 0
+		p.linesHere++
 	}
 
-	if p.isTerminator() {
-		p.char = terminator
+	// skip repeating whitespace
+	if unicode.IsSpace(rune(p.char)) {
+		// store first encountered whitespace to set as char afterwards
+		if p.firstSpace == 0 {
+			p.firstSpace = p.char
+		}
+		// don't add spaces to an empty frame
+		if len(p.frame) == 0 {
+			goto repeat
+		}
+		// lookahead by 1 to keep skipping space
+		if p.pos+1 < p.len && unicode.IsSpace(rune(p.input[p.pos+1])) {
+			goto repeat
+		}
+		// if 2 or more newlines have been encountered, set char to terminator
+		if p.linesHere >= 2 {
+			p.char = terminator
+		} else {
+			p.char = p.firstSpace
+		}
 	}
+	p.firstSpace, p.linesHere = 0, 0
+}
+
+// nextFlat calls `next` then flattens the frame
+func (p *Parser) nextFlat() {
+	p.next()
+	p.flattenFrame()
 }
 
 // nextUntil advances the parser until one of the destination options are encountered
-func (p *Parser) nextUntil(targetNode nodeType, destinationOptions, invalidChars string) {
+func (p *Parser) nextUntil(destinationOptions string) {
 	if p.char == eof || p.char == terminator {
 		return
 	}
 	for {
 		switch p.char {
-		case eof:
-			p.addChild(targetNode)
-			return
-		case terminator:
-			p.addChild(targetNode)
+		case eof, terminator:
 			return
 		}
 		if strings.ContainsRune(destinationOptions, rune(p.char)) {
-			p.addChild(targetNode)
 			return
-		}
-		if strings.ContainsRune(invalidChars, rune(p.char)) {
-			fmt.Printf("unexpected: %q\n", string(p.char))
-			p.addChild(targetNode)
-			return
-		}
-		if p.char == charNewline {
-			p.addChild(targetNode)
 		}
 		p.next()
 	}
 }
 
-func (p *Parser) skipWhitespace(allowTerminators bool) {
+func (p *Parser) skipWhitespace() {
+	if unicode.IsSpace(rune(p.char)) {
+		p.next()
+	}
+}
+
+func (p *Parser) skipTo(destination charType) {
 	for {
-		if p.char == eof || !unicode.IsSpace(rune(p.char)) && p.char != terminator || !allowTerminators && p.char == terminator {
+		switch p.char {
+		case eof, terminator:
+			return
+		case destination:
+			p.nextFlat()
 			return
 		}
 		p.next()
@@ -173,7 +216,16 @@ func (p *Parser) isTerminator() bool {
 	return false
 }
 
-// trimSpace trims the current frame of whitespace
-func (p *Parser) trimSpace() {
+func (p *Parser) trimFrame() {
 	p.frame = strings.TrimSpace(p.frame)
+}
+
+func (p *Parser) debug() {
+	for {
+		fmt.Printf("%q,%d,%q,%d\n", p.frame, p.pos, string(p.char), p.char)
+		if p.char == eof {
+			os.Exit(1)
+		}
+		p.next()
+	}
 }
