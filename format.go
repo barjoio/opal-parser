@@ -17,7 +17,7 @@ func (p *Parser) HTML() string {
 		case nodeHeading:
 			html += "<h" + node.Level + " class='opal_Heading'>\n"
 			html += "\t" + htmlText(node)
-			html += "</h1>\n"
+			html += "</h" + node.Level + ">\n"
 		case nodeParagraph:
 			html += "<p class='opal_P'>\n"
 			html += "\t" + htmlText(node)
