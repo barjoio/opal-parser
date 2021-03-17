@@ -59,7 +59,9 @@ func parseBlockTag(p *Parser) parseFn {
 		p.currentNode().Level = string(p.frame)
 	}
 
-	p.skipWhitespace()
+	if unicode.IsSpace(p.char) && p.char != charNewline {
+		p.nextFlat()
+	}
 
 	switch p.char {
 	case eof:

@@ -1,2 +1,4 @@
-.table
-asdas |  |asda 
+asd
+
+.table  
+asda | asdasd
