@@ -1,8 +1,6 @@
-package opalparser2
+package opalparser
 
-import (
-	"strings"
-)
+import "strings"
 
 // Node is a grammatically defined element in the Opal language
 // these are used to construct the abstract syntax tree
@@ -10,8 +8,10 @@ type Node struct {
 	Typ         nodeType  `json:"type,omitempty"`
 	Errors      []errType `json:"errors,omitempty"`
 	Value       string    `json:"value,omitempty"`
+	Attrs       []string  `json:"attrs,omitempty"`
 	DisplayText string    `json:"displayText,omitempty"`
 	URL         string    `json:"url,omitempty"`
+	Level       string    `json:"level,omitempty"`
 	Ln          int       `json:"line,omitempty"`
 	Col         int       `json:"column,omitempty"`
 	Children    []*Node   `json:"children,omitempty"`
@@ -27,34 +27,53 @@ type nodeType string
 
 // list of nodes that can be parsed
 const (
-	nodeEOF          nodeType = "EOF"
-	nodeInvalidTag   nodeType = "InvalidTag"
-	nodeWhitespace   nodeType = "Whitespace"
-	nodeRoot         nodeType = "Root"
-	nodeText         nodeType = "Text"
-	nodeTagName      nodeType = "TagName"
-	nodeBlockTag     nodeType = "BlockTag"
-	nodeBlockTagLine nodeType = "BlockTagLine"
-	nodeBlockTagAttr nodeType = "BlockTagAttr"
-	nodeParagraph    nodeType = "Paragraph"
-	nodeInlineTag    nodeType = "InlineTag"
-	nodeHyperlink    nodeType = "Hyperlink"
-	nodeBoldText     nodeType = "BoldText"
+	nodeEOF             nodeType = "EOF"
+	nodeInvalidTag      nodeType = "InvalidTag"
+	nodeWhitespace      nodeType = "Whitespace"
+	nodeRoot            nodeType = "Root"
+	nodeText            nodeType = "Text"
+	nodeListItem        nodeType = "ListItem"
+	nodeTagName         nodeType = "TagName"
+	nodeBlockTag        nodeType = "BlockTag"
+	nodeBlockTagLine    nodeType = "BlockTagLine"
+	nodeAttr            nodeType = "Attr"
+	nodeParagraph       nodeType = "Paragraph"
+	nodeList            nodeType = "List"
+	nodeTable           nodeType = "Table"
+	nodeTitle           nodeType = "Title"
+	nodeToC             nodeType = "ToC"
+	nodeHeading         nodeType = "Heading"
+	nodeInlineTag       nodeType = "InlineTag"
+	nodeHyperlink       nodeType = "Hyperlink"
+	nodeBoldText        nodeType = "BoldText"
+	nodeItalicText      nodeType = "ItalicText"
+	nodeUnderlineText   nodeType = "UnderlineText"
+	nodeBoldItalic      nodeType = "BoldItalic"
+	nodeBoldUnderline   nodeType = "BoldUnderline"
+	nodeItalicUnderline nodeType = "ItalicUnderline"
+	nodeCode            nodeType = "Code"
+	nodeTableRow        nodeType = "TableRow"
+	nodeTableData       nodeType = "TableData"
 )
 
 // makeNode returns a new node
 // parent nodes have only a type and list of children
-func (p *Parser) makeNode(n nodeType, hasVal bool) *Node {
-	val := p.frame
-	if !hasVal {
-		val = ""
+func (p *Parser) makeNode(n nodeType, hasVal, hasLineInfo bool) *Node {
+	val := ""
+	var startLn, startCol int
+	if hasVal {
+		val = trim(string(p.frame))
 	}
-	return &Node{Typ: n, Value: val, Ln: p.startLn, Col: p.startCol}
+	if hasLineInfo {
+		startLn = p.startLn
+		startCol = p.startCol
+	}
+	return &Node{Typ: n, Value: val, Ln: startLn, Col: startCol}
 }
 
 // createNode appends a new parent node to the node stack
 func (p *Parser) createNode(n nodeType) {
-	p.nodeStack = append(p.nodeStack, p.makeNode(n, false))
+	p.nodeStack = append(p.nodeStack, p.makeNode(n, false, true))
 	p.nodeType = n
 }
 
@@ -82,17 +101,17 @@ func (p *Parser) lastNode() *Node {
 }
 
 // addChild appends a new child node to the topmost node from the node stack
-func (p *Parser) addChild(n nodeType) {
-	p.frame = strings.TrimSpace(p.frame)
-	p.frame = strings.ReplaceAll(p.frame, "\n", " ")
+func (p *Parser) addChild(n nodeType, merge, hasLineInfo bool) {
 	// if the last node is of the same type, add the frame content
 	// to the end of the last node
-	if p.frame != "" {
-		if lastNode := p.lastNode(); lastNode != nil && lastNode.Typ == n {
-			p.lastNode().Value += " " + p.frame
+	val := trim(string(p.frame))
+	if val != "" {
+		lastNode := p.lastNode()
+		if merge && lastNode != nil && lastNode.Typ == n && n != nodeListItem {
+			p.lastNode().Value += " " + val
 		} else {
 			topNode := p.currentNode()
-			topNode.Children = append(topNode.Children, p.makeNode(n, true))
+			topNode.Children = append(topNode.Children, p.makeNode(n, true, hasLineInfo))
 		}
 	}
 	p.flattenFrame()
@@ -123,8 +142,12 @@ func (p *Parser) addToParent() {
 	p.popNode()
 }
 
-func (p *Parser) numChildren() int {
-	return len(p.currentNode().Children)
+func (p *Parser) addPopulatedToParent() {
+	if len(p.currentNode().Children) > 0 {
+		p.addToParent()
+	} else {
+		p.popNode()
+	}
 }
 
 func (p *Parser) parentNodeType() nodeType {
@@ -132,20 +155,48 @@ func (p *Parser) parentNodeType() nodeType {
 }
 
 func (p *Parser) determineNodeType() {
-	if p.frame == "" {
-		p.currentNode().Typ = nodeInlineTag
+	if len(p.frame) == 0 {
 		return
 	}
 	var t nodeType
-	switch p.frame {
-	case "l":
-		t = nodeHyperlink
+	switch strings.ToLower(string(p.frame)) {
+	case "1", "2", "3", "4", "5", "6":
+		t = nodeHeading
 	case "b":
 		t = nodeBoldText
+	case "bi", "ib":
+		t = nodeBoldItalic
+	case "bu", "ub":
+		t = nodeBoldUnderline
+	case "c":
+		t = nodeCode
+	case "i":
+		t = nodeItalicText
+	case "iu", "ui":
+		t = nodeItalicUnderline
+	case "l":
+		t = nodeHyperlink
+	case "list":
+		t = nodeList
+	case "table":
+		t = nodeTable
+	case "toc":
+		t = nodeToC
+	case "title":
+		t = nodeTitle
+	case "u":
+		t = nodeUnderlineText
 	default:
 		t = nodeInvalidTag
 		p.addError(errInvalidTagName)
 	}
 	p.currentNode().Typ = t
 	p.nodeType = t
+}
+
+func (p *Parser) appendAttr() {
+	if len(p.frame) > 0 {
+		attrs := &p.currentNode().Attrs
+		*attrs = append(*attrs, string(p.frame))
+	}
 }

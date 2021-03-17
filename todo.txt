@@ -1,4 +1,0 @@
-parseText method
-
-abc `
-` def    <-- ln/col here is wrong

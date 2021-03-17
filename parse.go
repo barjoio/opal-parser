@@ -1,22 +1,19 @@
-package opalparser2
+package opalparser
 
 import (
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 )
 
 // Parser is used to parse Opal documents
 type Parser struct {
-	input      string    // the string input containing markup
+	input      []rune    // the string input containing markup
 	filepath   string    // the file path to the markup file
-	char       charType  // the current character
-	charWidth  int       // the number of bytes used by the current character
-	frame      string    // the current sliding window selection
+	char       rune      // the current character
+	frame      []rune    // the current sliding window selection
 	len        int       // the length of the string input
 	start      int       // the start of the sliding window
 	pos        int       // the end of the sliding window (current position)
@@ -24,8 +21,10 @@ type Parser struct {
 	col        int       // the column number (position within line)
 	startLn    int       // the starting line of a node
 	startCol   int       // the starting column of a node
-	firstSpace charType  // stores the first encountered space in a set of whitespace
+	firstSpace rune      // stores the first encountered space in a set of whitespace
 	linesHere  int       // stores the number of lines encountered through a set of whitespace
+	termHere   bool      // stores whether a not a term has been found when advancing the parser
+	ignoreChar bool      //
 	parseFn    parseFn   // the current parse function
 	parseStack []parseFn // a stack of parse functions
 	tree       []*Node   // the abstract syntax tree
@@ -36,7 +35,9 @@ type Parser struct {
 // New is used to create a new parser
 func New() *Parser {
 	return &Parser{
+		pos:      -1,
 		ln:       1,
+		col:      0,
 		startCol: 1,
 		startLn:  1,
 	}
@@ -44,11 +45,12 @@ func New() *Parser {
 
 // Parse is used to parse a raw string input of Opal markup
 func (p *Parser) Parse(input string) {
-	p.input = input
-	p.len = len(input)
+	p.input = []rune(input)
+	p.len = len(p.input)
 	p.parseFn = parseBegin
 
 	p.createNode(nodeRoot)
+	p.next()
 
 	for p.parseFn != nil {
 		p.parseFn = p.parseFn(p)
@@ -56,13 +58,6 @@ func (p *Parser) Parse(input string) {
 
 	// add to tree
 	p.addToParent()
-
-	fmt.Println("parsing finished.")
-	b, err := json.MarshalIndent(p.tree, "", "  ")
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(string(b))
 }
 
 // ParseFile is used to parse files containing Opal markup
@@ -93,14 +88,14 @@ func (p *Parser) flattenFrame() {
 	p.start = p.pos
 	p.startCol = p.col
 	p.startLn = p.ln
-	p.frame = ""
+	p.frame = []rune{}
 }
 
 // next is used to advance the parsing state
 func (p *Parser) next() {
 	// add current character to frame
-	if p.char != 0 {
-		p.frame += string(p.char)
+	if p.char != 0 && !p.ignoreChar {
+		p.frame = append(p.frame, p.char)
 	}
 
 repeat:
@@ -113,13 +108,11 @@ repeat:
 	}
 
 	// increment pos/col
-	p.pos += p.charWidth
+	p.pos++
 	p.col++
 
 	// get new char
-	r, w := utf8.DecodeRuneInString(p.input[p.pos:])
-	p.char = charType(r)
-	p.charWidth = w
+	p.char = p.input[p.pos]
 
 	// handle newlines
 	if p.char == charNewline {
@@ -128,18 +121,23 @@ repeat:
 		p.linesHere++
 	}
 
+	// check for terminator
+	if p.char == charSemicolon {
+		p.char = terminator
+		return
+	}
+
 	// skip repeating whitespace
-	if unicode.IsSpace(rune(p.char)) {
+	if unicode.IsSpace(p.char) {
 		// store first encountered whitespace to set as char afterwards
 		if p.firstSpace == 0 {
 			p.firstSpace = p.char
 		}
-		// don't add spaces to an empty frame
-		if len(p.frame) == 0 {
-			goto repeat
+		if p.char == charNewline {
+			p.firstSpace = charNewline
 		}
-		// lookahead by 1 to keep skipping space
-		if p.pos+1 < p.len && unicode.IsSpace(rune(p.input[p.pos+1])) {
+		// lookahead by 1, check for space
+		if p.pos+1 < p.len && unicode.IsSpace(p.input[p.pos+1]) {
 			goto repeat
 		}
 		// if 2 or more newlines have been encountered, set char to terminator
@@ -164,12 +162,39 @@ func (p *Parser) nextUntil(destinationOptions string) {
 		return
 	}
 	for {
+	repeat:
 		switch p.char {
 		case eof, terminator:
 			return
+		case charBackslash:
+			if p.pos+1 < p.len {
+				escapeChar := p.input[p.pos+1]
+				p.ignoreChar = true
+				p.next()
+				p.ignoreChar = false
+				p.char = escapeChar
+				p.next()
+				goto repeat
+			}
 		}
-		if strings.ContainsRune(destinationOptions, rune(p.char)) {
+		if strings.ContainsRune(destinationOptions, p.char) {
 			return
+		}
+		p.next()
+	}
+}
+
+func (p *Parser) nextOverKeyword() bool {
+	if p.char == eof || p.char == terminator {
+		return false
+	}
+	for {
+		switch p.char {
+		case eof, terminator:
+			return false
+		}
+		if !unicode.IsLetter(p.char) && !unicode.IsNumber(p.char) {
+			return true
 		}
 		p.next()
 	}
@@ -181,7 +206,7 @@ func (p *Parser) skipWhitespace() {
 	}
 }
 
-func (p *Parser) skipTo(destination charType) {
+func (p *Parser) skipTo(destination rune) {
 	for {
 		switch p.char {
 		case eof, terminator:
@@ -194,30 +219,30 @@ func (p *Parser) skipTo(destination charType) {
 	}
 }
 
-// isTerminator checks for a semicolon or group of whitespace containing 2 or more newlines
-func (p *Parser) isTerminator() bool {
-	if p.char != charSemicolon && p.char != charNewline {
-		return false
+// parseEscapeChar writes the next character is it is, if allowed
+func (p *Parser) parseEscapeChar(escapeChars string) {
+	// ignore if next char is eof
+	if p.pos+1 >= p.len {
+		p.next()
+		return
 	}
-
-	if p.char == charSemicolon {
-		return true
-	}
-
-	var count int
-	for i := p.pos; i < p.len && count < 2 && unicode.IsSpace(rune(p.input[i])); i++ {
-		if p.input[i] == '\n' {
-			count++
-		}
-	}
-	if count == 2 {
-		return true
-	}
-	return false
-}
-
-func (p *Parser) trimFrame() {
-	p.frame = strings.TrimSpace(p.frame)
+	p.next()
+	p.frame = p.frame[:len(p.frame)-1]
+	p.next()
+	p.frame = p.frame[:len(p.frame)-1]
+	// p.frame = p.frame[:len(p.frame)-1]
+	// // backslashes and semicolons (terminator) are always valid escapes
+	// escapeChars += "\\;"
+	// nextChar := p.input[p.pos+1]
+	// p.next() // skip over backslash
+	// p.next() // skip over escaped char
+	// p.frame = p.frame[:len(p.frame)-2]
+	// // check if valid escape char
+	// if strings.ContainsRune(escapeChars, nextChar) {
+	// 	p.frame = append(p.frame, nextChar)
+	// 	return
+	// }
+	// p.addError(errInvalidEscapeChar)
 }
 
 func (p *Parser) debug() {
@@ -228,4 +253,8 @@ func (p *Parser) debug() {
 		}
 		p.next()
 	}
+}
+
+func trim(s string) string {
+	return strings.ReplaceAll(strings.TrimSpace(s), "\n", " ")
 }

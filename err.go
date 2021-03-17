@@ -1,15 +1,17 @@
-package opalparser2
+package opalparser
 
 import "fmt"
 
 type errType string
 
 const (
-	errUnexpectedTerm = "Unexpected terminator"
-	errUnexpectedEOF  = "Unexpected end of file"
-	errUnexpectedChar = "Unexpected character"
-	errInvalidTagName = "Invalid tag name"
-	errNoURL          = "No URL provided in link tag"
+	errUnexpectedTerm    = "Unexpected terminator"
+	errUnexpectedEOF     = "Unexpected end of file"
+	errUnexpectedChar    = "Unexpected character"
+	errInvalidEscapeChar = "Invalid escape character"
+	errInvalidTagName    = "Invalid tag name"
+	errNoURL             = "No URL provided in link tag"
+	errNoTag             = "No tag name provided"
 )
 
 func (p *Parser) addError(e errType) {
@@ -32,7 +34,7 @@ func (p *Parser) addErrorUnexpected() {
 		p.nextFlat()
 	default:
 		p.flattenFrame()
-		p.addError(errType(fmt.Sprintf("%v %s", errUnexpectedChar, string(p.char))))
+		p.addError(errType(errUnexpectedChar+" '"+string(p.char)) + "'")
 		p.nextFlat()
 	}
 	p.popNode()

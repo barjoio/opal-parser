@@ -1,18 +1,17 @@
-package opalparser2
-
-type charType rune
+package opalparser
 
 // list of characters found within the grammar of the markup
 const (
-	eof           charType = -1
-	terminator    charType = -2
-	charFullstop  charType = '.'
-	charColon     charType = ':'
-	charSlash     charType = '/'
-	charNewline   charType = '\n'
-	charSemicolon charType = ';'
-	charGrave     charType = '`'
-	charHyphen    charType = '-'
+	eof           rune = -1
+	terminator    rune = -2
+	charFullstop  rune = '.'
+	charColon     rune = ':'
+	charSlash     rune = '/'
+	charNewline   rune = '\n'
+	charSemicolon rune = ';'
+	charGrave     rune = '`'
+	charHyphen    rune = '-'
+	charBackslash rune = '\\'
 )
 
 var charsWhitespace = "\t\n\v\f\r " + string(rune(0x85)) + string(rune(0xA0))
