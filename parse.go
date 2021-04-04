@@ -1,34 +1,31 @@
 package opalparser
 
 import (
-	"fmt"
 	"io/ioutil"
-	"os"
 	"strings"
 	"unicode"
 )
 
 // Parser is used to parse Opal documents
 type Parser struct {
-	input      []rune    // the string input containing markup
-	filepath   string    // the file path to the markup file
-	char       rune      // the current character
-	frame      []rune    // the current sliding window selection
-	len        int       // the length of the string input
-	start      int       // the start of the sliding window
-	pos        int       // the end of the sliding window (current position)
-	ln         int       // the line number
-	col        int       // the column number (position within line)
-	startLn    int       // the starting line of a node
-	startCol   int       // the starting column of a node
-	firstSpace rune      // stores the first encountered space in a set of whitespace
-	linesHere  int       // stores the number of lines encountered through a set of whitespace
-	ignoreChar bool      // switch to deciding if the current character should be ignored
-	parseFn    parseFn   // the current parse function
-	parseStack []parseFn // a stack of parse functions
-	tree       []*Node   // the abstract syntax tree
-	nodeStack  []*Node   // a stack of nodes
-	nodeType   nodeType  // the nodeType of the current parent node
+	input      []rune   // the string input containing markup
+	filepath   string   // the file path to the markup file
+	char       rune     // the current character
+	frame      []rune   // the current sliding window selection
+	len        int      // the length of the string input
+	start      int      // the start of the sliding window
+	pos        int      // the end of the sliding window (current position)
+	ln         int      // the line number
+	col        int      // the column number (position within line)
+	startLn    int      // the starting line of a node
+	startCol   int      // the starting column of a node
+	firstSpace rune     // stores the first encountered space in a set of whitespace
+	linesHere  int      // stores the number of lines encountered through a set of whitespace
+	ignoreChar bool     // switch to deciding if the current character should be ignored
+	parseFn    parseFn  // the current parse function
+	tree       []*Node  // the abstract syntax tree
+	nodeStack  []*Node  // a stack of nodes
+	nodeType   nodeType // the nodeType of the current parent node
 }
 
 // New is used to create a new parser
@@ -67,18 +64,6 @@ func (p *Parser) ParseFile(filein string) {
 	}
 	p.filepath = filein
 	p.Parse(string(b))
-}
-
-// pushParseFn appends the current parse function to the parse function stack
-func (p *Parser) pushParseFn() {
-	p.parseStack = append(p.parseStack, p.parseFn)
-}
-
-// popParseFn returns and removes the topmost parse function from the parse function stack
-func (p *Parser) popParseFn() parseFn {
-	top := p.parseStack[len(p.parseStack)-1]
-	p.parseStack = p.parseStack[:len(p.parseStack)-1]
-	return top
 }
 
 // flattenFrame brings the start of the frame up the current position
@@ -205,54 +190,15 @@ func (p *Parser) skipWhitespace() {
 	}
 }
 
-func (p *Parser) skipTo(destination rune) {
-	for {
-		switch p.char {
-		case eof, terminator:
-			return
-		case destination:
-			p.nextFlat()
-			return
-		}
-		p.next()
-	}
-}
-
-// parseEscapeChar writes the next character is it is, if allowed
-func (p *Parser) parseEscapeChar(escapeChars string) {
-	// ignore if next char is eof
-	if p.pos+1 >= p.len {
-		p.next()
-		return
-	}
-	p.next()
-	p.frame = p.frame[:len(p.frame)-1]
-	p.next()
-	p.frame = p.frame[:len(p.frame)-1]
-	// p.frame = p.frame[:len(p.frame)-1]
-	// // backslashes and semicolons (terminator) are always valid escapes
-	// escapeChars += "\\;"
-	// nextChar := p.input[p.pos+1]
-	// p.next() // skip over backslash
-	// p.next() // skip over escaped char
-	// p.frame = p.frame[:len(p.frame)-2]
-	// // check if valid escape char
-	// if strings.ContainsRune(escapeChars, nextChar) {
-	// 	p.frame = append(p.frame, nextChar)
-	// 	return
-	// }
-	// p.addError(errInvalidEscapeChar)
-}
-
-func (p *Parser) debug() {
-	for {
-		fmt.Printf("%q,%d,%q,%d\n", p.frame, p.pos, string(p.char), p.char)
-		if p.char == eof {
-			os.Exit(1)
-		}
-		p.next()
-	}
-}
+// func (p *Parser) debug() {
+// 	for {
+// 		fmt.Printf("%q,%d,%q,%d\n", p.frame, p.pos, string(p.char), p.char)
+// 		if p.char == eof {
+// 			os.Exit(1)
+// 		}
+// 		p.next()
+// 	}
+// }
 
 func trim(s string) string {
 	return strings.ReplaceAll(strings.TrimSpace(s), "\n", " ")

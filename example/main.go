@@ -11,7 +11,7 @@ func main() {
 
 	p.ParseFile("example/test.opal")
 
-	h := p.HTML()
+	h := p.JSON()
 
 	fmt.Println(h)
 }
