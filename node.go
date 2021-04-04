@@ -17,12 +17,6 @@ type Node struct {
 	Children    []*Node   `json:"children,omitempty"`
 }
 
-// nodeData is an object describing data relating to a node
-type nodeData struct {
-	typ   string
-	value string
-}
-
 type nodeType string
 
 // list of nodes that can be parsed
@@ -85,11 +79,6 @@ func (p *Parser) currentNode() *Node {
 	return nil
 }
 
-// setNodeType sets the type for the current node
-func (p *Parser) setNodeType(n nodeType) {
-	p.currentNode().Typ = n
-}
-
 // lastNode returns get the most recently added node
 func (p *Parser) lastNode() *Node {
 	topNodeChildren := p.currentNode().Children
@@ -148,10 +137,6 @@ func (p *Parser) addPopulatedToParent() {
 	} else {
 		p.popNode()
 	}
-}
-
-func (p *Parser) parentNodeType() nodeType {
-	return p.currentNode().Typ
 }
 
 func (p *Parser) determineNodeType() {

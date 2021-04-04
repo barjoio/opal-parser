@@ -23,8 +23,7 @@ type Parser struct {
 	startCol   int       // the starting column of a node
 	firstSpace rune      // stores the first encountered space in a set of whitespace
 	linesHere  int       // stores the number of lines encountered through a set of whitespace
-	termHere   bool      // stores whether a not a term has been found when advancing the parser
-	ignoreChar bool      //
+	ignoreChar bool      // switch to deciding if the current character should be ignored
 	parseFn    parseFn   // the current parse function
 	parseStack []parseFn // a stack of parse functions
 	tree       []*Node   // the abstract syntax tree

@@ -14,6 +14,7 @@ const (
 	errNoTag             = "No tag name provided"
 )
 
+// addError appends an error to the Errors property on the root node
 func (p *Parser) addError(e errType) {
 	var err string
 	if p.filepath == "" {
@@ -24,6 +25,7 @@ func (p *Parser) addError(e errType) {
 	p.nodeStack[0].Errors = append(p.nodeStack[0].Errors, errType(err))
 }
 
+// addErrorUnexpected adds an error for an unexpected character
 func (p *Parser) addErrorUnexpected() {
 	switch p.char {
 	case eof:

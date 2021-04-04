@@ -236,7 +236,6 @@ func parseInlineTag(p *Parser) {
 	p.addToParent()
 	p.next()
 	p.flattenFrame()
-	return
 }
 
 func parseHyperlink(p *Parser, s string) {
