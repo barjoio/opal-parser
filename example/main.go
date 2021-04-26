@@ -1,17 +1,14 @@
 package main
 
 import (
-	"fmt"
-
-	opalparser2 "github.com/barjoco/opalparser"
+	"github.com/barjoco/opalparser"
 )
 
 func main() {
-	p := opalparser2.New()
+	p := opalparser.New()
 
 	p.ParseFile("example/test.opal")
 
-	h := p.JSON()
-
-	fmt.Println(h)
+	pdf := p.PDF()
+	pdf.SaveAs("example/test.pdf")
 }

@@ -3,6 +3,8 @@ package opalparser
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/jung-kurt/gofpdf"
 )
 
 func (p *Parser) HTML() string {
@@ -110,4 +112,37 @@ func (p *Parser) JSON() string {
 		panic(err)
 	}
 	return string(b)
+}
+
+type PDF struct {
+	pdf    *gofpdf.Fpdf
+	Base64 string
+}
+
+func (p *Parser) PDF() PDF {
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.AddPage()
+	pdf.SetFont("Arial", "", 16)
+
+	for _, node := range p.tree[0].Children {
+		switch node.Typ {
+		case nodeHeading:
+			pdf.SetFont("Arial", "B", 20)
+			pdf.Write(10, node.Children[0].Value)
+			pdf.SetY(pdf.GetY() + 10)
+			pdf.SetFont("Arial", "", 16)
+		case nodeParagraph:
+			pdf.Write(10, node.Children[0].Value)
+			pdf.SetY(pdf.GetY() + 10)
+		}
+	}
+
+	return PDF{
+		pdf:    pdf,
+		Base64: "",
+	}
+}
+
+func (p *PDF) SaveAs(filepath string) {
+	p.pdf.OutputFileAndClose(filepath)
 }
