@@ -17,37 +17,37 @@ type Node struct {
 	Children    []*Node   `json:"children,omitempty"`
 }
 
-type nodeType string
+type nodeType int
 
 // list of nodes that can be parsed
 const (
-	nodeEOF             nodeType = "EOF"
-	nodeInvalidTag      nodeType = "InvalidTag"
-	nodeWhitespace      nodeType = "Whitespace"
-	nodeRoot            nodeType = "Root"
-	nodeText            nodeType = "Text"
-	nodeListItem        nodeType = "ListItem"
-	nodeTagName         nodeType = "TagName"
-	nodeBlockTag        nodeType = "BlockTag"
-	nodeBlockTagLine    nodeType = "BlockTagLine"
-	nodeAttr            nodeType = "Attr"
-	nodeParagraph       nodeType = "Paragraph"
-	nodeList            nodeType = "List"
-	nodeTable           nodeType = "Table"
-	nodeTitle           nodeType = "Title"
-	nodeToC             nodeType = "ToC"
-	nodeHeading         nodeType = "Heading"
-	nodeInlineTag       nodeType = "InlineTag"
-	nodeHyperlink       nodeType = "Hyperlink"
-	nodeBoldText        nodeType = "BoldText"
-	nodeItalicText      nodeType = "ItalicText"
-	nodeUnderlineText   nodeType = "UnderlineText"
-	nodeBoldItalic      nodeType = "BoldItalic"
-	nodeBoldUnderline   nodeType = "BoldUnderline"
-	nodeItalicUnderline nodeType = "ItalicUnderline"
-	nodeCode            nodeType = "Code"
-	nodeTableRow        nodeType = "TableRow"
-	nodeTableData       nodeType = "TableData"
+	nodeEOF nodeType = iota
+	nodeInvalidTag
+	nodeWhitespace
+	nodeRoot
+	nodeText
+	nodeListItem
+	nodeTagName
+	nodeBlockTag
+	nodeBlockTagLine
+	nodeAttr
+	nodeParagraph
+	nodeList
+	nodeTable
+	nodeTitle
+	nodeToC
+	nodeHeading
+	nodeInlineTag
+	nodeHyperlink
+	nodeBoldText
+	nodeItalicText
+	nodeUnderlineText
+	nodeBoldItalic
+	nodeBoldUnderline
+	nodeItalicUnderline
+	nodeCode
+	nodeTableRow
+	nodeTableData
 )
 
 // makeNode returns a new node
@@ -69,6 +69,7 @@ func (p *Parser) makeNode(n nodeType, hasVal, hasLineInfo bool) *Node {
 func (p *Parser) createNode(n nodeType) {
 	p.nodeStack = append(p.nodeStack, p.makeNode(n, false, true))
 	p.nodeType = n
+	p.nodesParsedLinear = append(p.nodesParsedLinear, n)
 }
 
 // currentNode returns the topmost node from the node stack
@@ -104,6 +105,7 @@ func (p *Parser) addChild(n nodeType, merge, hasLineInfo bool) {
 		}
 	}
 	p.flattenFrame()
+	p.nodesParsedLinear = append(p.nodesParsedLinear, n)
 }
 
 // popNode removes the topmost node from the node stack

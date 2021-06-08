@@ -1,0 +1,36 @@
+[
+  {
+    "type": "Root",
+    "line": 1,
+    "column": 1,
+    "children": [
+      {
+        "type": "Heading",
+        "level": "1",
+        "line": 1,
+        "column": 1,
+        "children": [
+          {
+            "type": "Text",
+            "value": "Heading one",
+            "line": 1,
+            "column": 4
+          }
+        ]
+      },
+      {
+        "type": "Paragraph",
+        "line": 3,
+        "column": 1,
+        "children": [
+          {
+            "type": "Text",
+            "value": "Lorem ipsum",
+            "line": 3,
+            "column": 1
+          }
+        ]
+      }
+    ]
+  }
+]

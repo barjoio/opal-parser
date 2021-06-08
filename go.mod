@@ -1,4 +1,4 @@
-module github.com/barjoco/opalparser
+module github.com/barjoio/opalparser
 
 go 1.15
 

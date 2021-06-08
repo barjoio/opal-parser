@@ -8,24 +8,25 @@ import (
 
 // Parser is used to parse Opal documents
 type Parser struct {
-	input      []rune   // the string input containing markup
-	filepath   string   // the file path to the markup file
-	char       rune     // the current character
-	frame      []rune   // the current sliding window selection
-	len        int      // the length of the string input
-	start      int      // the start of the sliding window
-	pos        int      // the end of the sliding window (current position)
-	ln         int      // the line number
-	col        int      // the column number (position within line)
-	startLn    int      // the starting line of a node
-	startCol   int      // the starting column of a node
-	firstSpace rune     // stores the first encountered space in a set of whitespace
-	linesHere  int      // stores the number of lines encountered through a set of whitespace
-	ignoreChar bool     // switch to deciding if the current character should be ignored
-	parseFn    parseFn  // the current parse function
-	tree       []*Node  // the abstract syntax tree
-	nodeStack  []*Node  // a stack of nodes
-	nodeType   nodeType // the nodeType of the current parent node
+	input             []rune     // the string input containing markup
+	filepath          string     // the file path to the markup file
+	char              rune       // the current character
+	frame             []rune     // the current sliding window selection
+	len               int        // the length of the string input
+	start             int        // the start of the sliding window
+	pos               int        // the end of the sliding window (current position)
+	ln                int        // the line number
+	col               int        // the column number (position within line)
+	startLn           int        // the starting line of a node
+	startCol          int        // the starting column of a node
+	firstSpace        rune       // stores the first encountered space in a set of whitespace
+	linesHere         int        // stores the number of lines encountered through a set of whitespace
+	ignoreChar        bool       // switch to deciding if the current character should be ignored
+	parseFn           parseFn    // the current parse function
+	tree              []*Node    // the abstract syntax tree
+	nodeStack         []*Node    // a stack of nodes
+	nodeType          nodeType   // the nodeType of the current parent node
+	nodesParsedLinear []nodeType // an array of all detected nodeTypes in the order they appear
 }
 
 // New is used to create a new parser
@@ -58,6 +59,17 @@ func (p *Parser) Parse(input string) {
 
 // ParseFile is used to parse files containing Opal markup
 func (p *Parser) ParseFile(filein string) {
+	// f, err := os.Create("cpuprofile")
+	// if err != nil {
+	// 	fmt.Fprintf(os.Stderr, "could not create CPU profile: %v\n", err)
+	// 	os.Exit(1)
+	// }
+	// if err := pprof.StartCPUProfile(f); err != nil {
+	// 	fmt.Fprintf(os.Stderr, "could not start CPU profile: %v\n", err)
+	// 	os.Exit(1)
+	// }
+	// defer pprof.StopCPUProfile()
+
 	b, err := ioutil.ReadFile(filein)
 	if err != nil {
 		panic(err)

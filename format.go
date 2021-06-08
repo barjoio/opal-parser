@@ -7,6 +7,10 @@ import (
 	"github.com/jung-kurt/gofpdf"
 )
 
+func (p *Parser) Tree() []*Node {
+	return p.tree
+}
+
 func (p *Parser) HTML() string {
 	var html string
 	for _, node := range p.tree[0].Children {

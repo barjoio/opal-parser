@@ -1,7 +1,9 @@
 package main
 
 import (
-	"github.com/barjoco/opalparser"
+	"fmt"
+
+	"github.com/barjoio/opalparser"
 )
 
 func main() {
@@ -9,6 +11,5 @@ func main() {
 
 	p.ParseFile("example/test.opal")
 
-	pdf := p.PDF()
-	pdf.SaveAs("example/test.pdf")
+	fmt.Println(p.HTML())
 }
